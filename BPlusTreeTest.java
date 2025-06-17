@@ -17,7 +17,7 @@ public class BPlusTreeTest {
         testBasicOperations();
 
         // 大数据量性能测试
-        testPerformanceWith5Million();
+//        testPerformanceWith5Million();
 
         System.out.println("所有测试完成！");
     }

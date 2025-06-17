@@ -12,7 +12,9 @@ public class InternalNode extends BPlusTreeNode {
     public InternalNode(int pageId, int maxKeys) {
         super(pageId, false, maxKeys);
         this.maxKeys = maxKeys;
-        this.childPageIds = new int[maxKeys + 2]; // 增加一个位置用于分裂时的临时存储
+        // 修正：keys数组也需要多一个位置用于分裂时的临时存储
+        this.keys = new String[maxKeys + 1];
+        this.childPageIds = new int[maxKeys + 2]; // 子节点指针数组保持不变
         // 初始化所有子节点指针为-1
         for (int i = 0; i < childPageIds.length; i++) {
             childPageIds[i] = -1;
@@ -153,8 +155,9 @@ public class InternalNode extends BPlusTreeNode {
 
     // 用于分裂时的插入（允许临时超过容量）
     public void insertKeyChildForSplit(String key, int leftChildId, int rightChildId) {
+        // 修正：检查是否会越界，keys数组现在是maxKeys+1大小
         if (keyCount >= maxKeys + 1) {
-            throw new IllegalStateException("内部节点超过分裂容量限制");
+            throw new IllegalStateException("内部节点超过分裂容量限制。keyCount=" + keyCount + ", maxKeys=" + maxKeys);
         }
 
         int pos = 0;
@@ -163,18 +166,31 @@ public class InternalNode extends BPlusTreeNode {
             pos++;
         }
 
-        // 移动现有的keys和子节点指针
-        for (int i = keyCount; i > pos; i--) {
-            keys[i] = keys[i - 1];
+        // 修正：确保数组移动操作不会越界
+        // 移动现有的keys（最多移动到maxKeys位置）
+        for (int i = Math.min(keyCount, maxKeys); i > pos; i--) {
+            if (i < keys.length && i - 1 >= 0) {
+                keys[i] = keys[i - 1];
+            }
         }
-        for (int i = keyCount + 1; i > pos + 1; i--) {
-            childPageIds[i] = childPageIds[i - 1];
+
+        // 移动现有的子节点指针
+        for (int i = Math.min(keyCount + 1, maxKeys + 1); i > pos + 1; i--) {
+            if (i < childPageIds.length && i - 1 >= 0) {
+                childPageIds[i] = childPageIds[i - 1];
+            }
         }
 
         // 插入新的key和子节点指针
-        keys[pos] = key;
-        childPageIds[pos] = leftChildId;
-        childPageIds[pos + 1] = rightChildId;
+        if (pos < keys.length) {
+            keys[pos] = key;
+        }
+        if (pos < childPageIds.length) {
+            childPageIds[pos] = leftChildId;
+        }
+        if (pos + 1 < childPageIds.length) {
+            childPageIds[pos + 1] = rightChildId;
+        }
         keyCount++;
 
         System.out.println("向内部节点插入(用于分裂): key=" + key + ", pos=" + pos + ", keyCount=" + keyCount);
@@ -194,22 +210,28 @@ public class InternalNode extends BPlusTreeNode {
         // 移动后半部分的keys到新节点（不包括中间key）
         for (int i = midIndex + 1; i < keyCount; i++) {
             int newIndex = i - midIndex - 1;
-            newInternal.keys[newIndex] = keys[i];
-            keys[i] = null; // 清空原位置
-            newInternal.keyCount++;
-            System.out.println("移动key到新内部节点: " + newInternal.keys[newIndex] + " -> 位置" + newIndex);
+            if (newIndex < newInternal.keys.length && i < keys.length) {
+                newInternal.keys[newIndex] = keys[i];
+                keys[i] = null; // 清空原位置
+                newInternal.keyCount++;
+                System.out.println("移动key到新内部节点: " + newInternal.keys[newIndex] + " -> 位置" + newIndex);
+            }
         }
 
         // 移动后半部分的子节点指针到新节点
         for (int i = midIndex + 1; i <= keyCount; i++) {
             int newIndex = i - midIndex - 1;
-            newInternal.childPageIds[newIndex] = childPageIds[i];
-            childPageIds[i] = -1; // 清空原位置
-            System.out.println("移动子节点到新内部节点: " + newInternal.childPageIds[newIndex] + " -> 位置" + newIndex);
+            if (newIndex < newInternal.childPageIds.length && i < childPageIds.length) {
+                newInternal.childPageIds[newIndex] = childPageIds[i];
+                childPageIds[i] = -1; // 清空原位置
+                System.out.println("移动子节点到新内部节点: " + newInternal.childPageIds[newIndex] + " -> 位置" + newIndex);
+            }
         }
 
         // 清空中间key（它会被提升到父节点）
-        keys[midIndex] = null;
+        if (midIndex < keys.length) {
+            keys[midIndex] = null;
+        }
 
         // 更新当前节点的key数量
         keyCount = midIndex;
